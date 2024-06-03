@@ -43,9 +43,10 @@ void push_record(records* recs, int i, int start, int end);
 void FCFS(queue* ready_queue);
 void SJF(queue* q);
 void Priority(queue* q);
+void RR(queue* q);
 void LIFO(queue* q);
 void Aging(queue* q, int timer);
-void Scheduler(process* processes, queue* ready_queue, queue* waiting_queue, int* turnaround, void (*pf)(queue*), int RR, bool preemptive, bool aging);
+void Scheduler(process* processes, queue* ready_queue, queue* waiting_queue, int* turnaround, void (*pf)(queue*), int time_slice, bool preemptive, bool aging);
 void Gantt_Chart(records* recs);
 void Evaluation(process* processes, int* turnaround);
 
@@ -146,7 +147,7 @@ void push_record(records* recs, int i, int start, int end) {
     }
 }
 
-void Scheduler(process* processes, queue* ready_queue, queue* waiting_queue, int* turnaround, void (*pf)(queue*), int RR, bool preemptive, bool aging) {
+void Scheduler(process* processes, queue* ready_queue, queue* waiting_queue, int* turnaround, void (*pf)(queue*), int time_slice, bool preemptive, bool aging) {
     bool complete[BUFFER_SIZE] = {0,};
     bool finish = false;
     int timer = 0, start = 0, start_io = 0;
@@ -173,7 +174,7 @@ void Scheduler(process* processes, queue* ready_queue, queue* waiting_queue, int
             }
         }
 
-        // CPU가 할당된 프로세스가 종료될 때
+        // CPU가 할당된 프로세스가 종료될 때. ready queue 관점
         if (assigned != 0 && assigned->burst_time == timer-start) {
             int i = assigned-copy;
             complete[i] = true;
@@ -193,18 +194,18 @@ void Scheduler(process* processes, queue* ready_queue, queue* waiting_queue, int
             assigned = 0;
         }
         // Round Robin일 경우. 아닐 때는 RR이 매우 커서 고려할 필요X
-        else if (assigned !=0 && RR == timer-start) {
+        else if (assigned !=0 && time_slice == timer-start) {
             int i = assigned-copy;
-            assigned->burst_time -= RR;
-            assigned->interrupt_time -= RR;
+            assigned->burst_time -= time_slice;
+            assigned->interrupt_time -= time_slice;
             push_queue(ready_queue, assigned);
             push_record(&recs, i, start, timer);
-            (*pf)(ready_queue);
+            RR(ready_queue);
             pop_queue(ready_queue, &assigned); //
             start = timer;
         }
 
-        // IO 작업 중이던 것이 완료될 때
+        // IO 작업 중이던 것이 완료될 때. waiting queue 관점
         if (assigned_io != 0 && assigned_io->IO_burst_time == timer-start_io) {
             assigned_io->arrival_time = timer;
             push_queue(ready_queue, assigned_io);
@@ -261,7 +262,8 @@ void Scheduler(process* processes, queue* ready_queue, queue* waiting_queue, int
 }
 
 void FCFS(queue* q) {
-    //nothing
+    q->processes[q->end-1]->priority = q->processes[q->end-1]->arrival_time;
+    Priority(q);
 }
 void SJF(queue* q) {
     for (int i = 0; i < q->end; i++){
@@ -284,6 +286,16 @@ void Priority(queue* q) {
             }
         }
     }
+}
+void RR(queue* q) {
+    if (q->end-1 != 0) {
+        if (q->processes[q->end-2]->priority >= 100) // 100이상이면 RR에 의해 뒤로 밀려난 것. 그 뒤로 줄 서면 됨
+            q->processes[q->end-1]->priority = q->processes[q->end-2]->priority + 1;    
+        else 
+            q->processes[q->end-1]->priority = 100; // 만약 맨 마지막이 100이하였으면 최초로 밀려난 것. 
+    }
+        
+    Priority(q);
 }
 void LIFO(queue* q) {
     for (int i = 0; i < q->end; i++){
